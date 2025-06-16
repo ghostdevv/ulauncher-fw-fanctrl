@@ -1,0 +1,18 @@
+{
+    "required_api_version": "2",
+    "name": "Framework Fan Control",
+    "description": "A ULauncher extension that wraps fw-fanctrl (https://github.com/TamtamHero/fw-fanctrl)",
+    "developer_name": "Willow (GHOST)",
+    "icon": "images/fw-fanctrl.png",
+    "options": {
+        "query_debounce": 0.1
+    },
+    "preferences": [
+        {
+            "id": "fw_fanctrl_kw",
+            "type": "keyword",
+            "name": "Framework Fan Control",
+            "default_value": "fw"
+        }
+    ]
+}
