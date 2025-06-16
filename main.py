@@ -8,6 +8,7 @@ from ulauncher.api.shared.item.ExtensionResultItem import ExtensionResultItem
 from ulauncher.api.shared.action.RenderResultListAction import RenderResultListAction
 from ulauncher.api.shared.action.DoNothingAction import DoNothingAction
 from ulauncher.api.shared.action.ExtensionCustomAction import ExtensionCustomAction
+from ulauncher.api.shared.action.CopyToClipboardAction import CopyToClipboardAction
 from fuzzyfinder import fuzzyfinder
 
 
@@ -30,32 +31,30 @@ class FwFanctrlExtension(Extension):
 
     def handle_toggle_active_action(self, query: str | None):
         if self.state is None:
-            return self.render_not_ready()
+            return self.refresh_and_render(query)
 
         try:
-            if self.state["active"]:
-                subprocess.run(["fw-fanctrl", "pause"], check=True)
-            else:
-                subprocess.run(["fw-fanctrl", "resume"], check=True)
-        except subprocess.CalledProcessError:
-            pass
+            subprocess.run(
+                ["fw-fanctrl", "pause" if self.state["active"] else "resume"],
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            return self.render_error(str(e))
 
-        self.refresh_state()
-        return self.render(query)
+        return self.refresh_and_render(query)
 
     def handle_set_strategy_action(self, query: str | None, strategy: str):
         if self.state is None:
-            return self.render_not_ready()
+            return self.refresh_and_render(query)
 
         try:
             subprocess.run(["fw-fanctrl", "use", strategy], check=True)
-        except subprocess.CalledProcessError:
-            pass
+        except subprocess.CalledProcessError as e:
+            return self.render_error(str(e))
 
-        self.refresh_state()
-        return self.render(query)
+        return self.refresh_and_render(query)
 
-    def refresh_state(self):
+    def refresh_state(self) -> str | None:
         try:
             result = subprocess.run(
                 ["fw-fanctrl", "--output-format=JSON", "print", "all"],
@@ -73,25 +72,36 @@ class FwFanctrlExtension(Extension):
                 "temperature": data["temperature"],
                 "strategies": list(data["configuration"]["data"]["strategies"].keys()),
             }
+            return None
+        except subprocess.CalledProcessError as e:
+            return f"fw-fanctrl command failed: {str(e)}"
+        except json.JSONDecodeError as e:
+            return f"Failed to parse fw-fanctrl output: {str(e)}"
+        except FileNotFoundError:
+            return "fw-fanctrl command not found. Please ensure it's installed and in PATH."
 
-        except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError):
-            pass
-
-    def render_not_ready(self):
+    def render_error(self, error: str):
         return RenderResultListAction(
             [
                 ExtensionResultItem(
                     icon="images/fw-fanctrl.png",
-                    name="Not Ready",
-                    description="Please retry and/or consult the logs.",
-                    on_enter=DoNothingAction(),
+                    name="An unexpected error occurred",
+                    description="Press enter to copy to clipboard, good luck o7",
+                    on_enter=CopyToClipboardAction(error),
                 )
             ]
         )
 
+    def refresh_and_render(self, query: str | None):
+        error = self.refresh_state()
+        if error:
+            return self.render_error(error)
+
+        return self.render(query)
+
     def render(self, query: str | None):
         if self.state is None:
-            return self.render_not_ready()
+            return self.refresh_and_render(query)
 
         all = [
             ExtensionResultItem(
